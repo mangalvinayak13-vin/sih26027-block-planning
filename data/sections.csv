@@ -1,7 +1,0 @@
-section_id,section_code,section_name,zone,num_tracks,length_km
-SEC01,MLND-TNA,MULUND - THANE,N/A (derived from real timetable),2,2
-SEC02,DR-MTN,DADAR - MUMBAI (MATU,N/A (derived from real timetable),2,1
-SEC03,BNXR-DDJ,BIDHANNAGAR - DUM DUM JN.,N/A (derived from real timetable),2,3
-SEC04,CLA-MTN,KURLA - MUMBAI (MATU,N/A (derived from real timetable),2,5
-SEC05,BNXR-SDAH,BIDHANNAGAR - SEALDAH,N/A (derived from real timetable),2,6
-SEC06,BND-VK,BHANDUP - VIKHROLI,N/A (derived from real timetable),2,3
