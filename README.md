@@ -87,11 +87,19 @@ backend/
   data/synthetic/               (generated at runtime, into SQLite — nothing static here)
 frontend/
   src/
-    pages/
-      WhatIsABlock.jsx          Block/pipeline explainer for evaluators
-      Corridor.jsx               Raw inputs: corridor map, demands, real trains, gangs
-      Dashboard.jsx              Ranked plans, reasoning, approve/reject
-      DataSources.jsx            Real vs synthetic citations
+    pages/                        One page per pipeline stage (8 total), in order:
+      Stage1DataSources.jsx        Corridor map, real-vs-synthetic breakdown
+      Stage2Preprocessing.jsx       Validation funnel + the one deliberately-bad demo record
+      Stage3Constraints.jsx          Interactive Gantt timelines per section/gang, overlaps highlighted
+      Stage4Optimization.jsx         Runs the solver; shows real solver stats (vars, constraints, solve time)
+      Stage5Conflicts.jsx             Priority-score bar charts per contested section
+      Stage6Candidates.jsx            Side-by-side candidate plans + independent feasibility re-check
+      Stage7Ranked.jsx                 Ranked comparison, "why #1 beats #2" diffing
+      Stage8Dashboard.jsx              Approve/reject + decision log
+    components/                   Reusable hand-rolled visuals (no charting library)
+      Timeline.jsx                  Gantt-style timeline (CSS/flexbox, not SVG)
+      BarChart.jsx                    Horizontal bar chart
+      CorridorMap.jsx                  Station/section map, doubles as a section picker
     api.js                       All backend fetch calls in one place
 ```
 

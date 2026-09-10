@@ -32,6 +32,13 @@ class BuiltModel:
     granted_vars: dict[str, cp_model.IntVar]   # demand_id -> BoolVar
     priorities: dict[str, float]                 # demand_id -> priority score [0,1]
     weights: dict[str, int]                       # demand_id -> integer objective weight
+    # Plain counts of what got built, exposed purely so the "Optimization
+    # Engine" page can show evaluators real numbers instead of a black box
+    # ("14 decision variables, 9 hard constraint groups...").
+    num_variables: int = 0
+    num_train_forced_zero: int = 0
+    num_section_noverlap_groups: int = 0
+    num_gang_noverlap_groups: int = 0
 
 
 def build_model(
@@ -93,6 +100,7 @@ def build_model(
     def _overlaps(a_start, a_end, b_start, b_end) -> bool:
         return a_start < b_end and b_start < a_end
 
+    num_train_forced_zero = 0
     for d in demands:
         clash = any(
             w.section_id == d.section_id and _overlaps(d.start_min, d.end_min, w.start_min, w.end_min)
@@ -100,6 +108,7 @@ def build_model(
         )
         if clash:
             model.Add(granted_vars[d.id] == 0)
+            num_train_forced_zero += 1
 
     # --- HARD CONSTRAINT: safety / interlocking rule -----------------
     # A track section cannot be occupied by two conflicting BLOCKS at the
@@ -119,9 +128,11 @@ def build_model(
     for d in demands:
         sections.setdefault(d.section_id, []).append(demand_intervals[d.id])
 
+    num_section_groups = 0
     for section_id, intervals in sections.items():
         if len(intervals) > 1:
             model.AddNoOverlap(intervals)
+            num_section_groups += 1
 
     # --- HARD CONSTRAINT: resource (gang) availability ----------------
     # A maintenance gang/machine can only be in one place at a time. A
@@ -131,9 +142,11 @@ def build_model(
     by_gang: dict[str, list[cp_model.IntervalVar]] = {}
     for d in demands:
         by_gang.setdefault(d.assigned_gang_id, []).append(demand_intervals[d.id])
+    num_gang_groups = 0
     for gang_id, intervals in by_gang.items():
         if len(intervals) > 1:
             model.AddNoOverlap(intervals)
+            num_gang_groups += 1
 
     # Timetable & train-path constraint and cross-department coordination
     # are both already satisfied structurally above: real train intervals
@@ -142,4 +155,8 @@ def build_model(
 
     model.Maximize(sum(weights[d.id] * granted_vars[d.id] for d in demands))
 
-    return BuiltModel(model=model, granted_vars=granted_vars, priorities=priorities, weights=weights)
+    return BuiltModel(
+        model=model, granted_vars=granted_vars, priorities=priorities, weights=weights,
+        num_variables=len(demands), num_train_forced_zero=num_train_forced_zero,
+        num_section_noverlap_groups=num_section_groups, num_gang_noverlap_groups=num_gang_groups,
+    )

@@ -100,6 +100,23 @@ class PlanRow(Base):
     reviewed_by = Column(String, nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
 
+    # Stage 6 (feasibility validation) — an INDEPENDENT re-check of this
+    # plan, stored so the "Candidate Plans" page can show it without
+    # re-solving. See optimizer/solver.py::_feasibility_check.
+    feasibility_section_conflicts = Column(Integer, nullable=True)
+    feasibility_gang_conflicts = Column(Integer, nullable=True)
+    feasibility_train_conflicts = Column(Integer, nullable=True)
+    is_feasible = Column(Boolean, nullable=True)
+
+    # Stage 4 (optimization engine) transparency numbers, same for every
+    # rank within one run — see optimizer/solver.py's PlanResult.solver_stats.
+    solver_status = Column(String, nullable=True)
+    solve_time_ms = Column(Float, nullable=True)
+    num_variables = Column(Integer, nullable=True)
+    num_train_forced_zero = Column(Integer, nullable=True)
+    num_section_noverlap_groups = Column(Integer, nullable=True)
+    num_gang_noverlap_groups = Column(Integer, nullable=True)
+
     items = relationship("PlanDemandRow", back_populates="plan", cascade="all, delete-orphan")
 
 

@@ -41,6 +41,9 @@ class PlanResult:
     generated_at: datetime
     items: list[PlanItem] = field(default_factory=list)
     feasibility_report: dict = field(default_factory=dict)
+    # Stage 4 transparency: real numbers from the actual solve, so the
+    # "Optimization Engine" page isn't just a claim that CP-SAT ran.
+    solver_stats: dict = field(default_factory=dict)
 
 
 def _overlaps(a_start, a_end, b_start, b_end) -> bool:
@@ -176,6 +179,14 @@ def solve_ranked_plans(
                 generated_at=datetime.now(timezone.utc),
                 items=items,
                 feasibility_report=_feasibility_check(granted_demands, real_windows),
+                solver_stats={
+                    "status": solver.StatusName(status),
+                    "solve_time_ms": round(solver.WallTime() * 1000, 1),
+                    "num_variables": built.num_variables,
+                    "num_train_forced_zero": built.num_train_forced_zero,
+                    "num_section_noverlap_groups": built.num_section_noverlap_groups,
+                    "num_gang_noverlap_groups": built.num_gang_noverlap_groups,
+                },
             )
         )
 

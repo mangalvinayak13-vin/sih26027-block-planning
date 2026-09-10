@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.data_sources.corridor import SECTIONS, STATIONS
 from app.data_sources.synthetic_blocks import BlockDemand, GANGS
-from app.data_sources.real_timetable import RealTrainWindow
+from app.data_sources.real_timetable import RealTrainWindow, load_real_train_windows
 from app.db.models import BlockDemandRow, GangRow, HistoricalBlockRow, PlanDemandRow, PlanRow, RealTrainWindowRow
 from app.db.session import get_db
 from app.optimizer.solver import solve_ranked_plans
@@ -155,6 +155,16 @@ def solve_plans(db: Session = Depends(get_db)):
             run_id=pr.run_id, rank=pr.rank, objective_value=pr.objective_value,
             total_track_time_returned_min=pr.total_track_time_returned_min,
             generated_at=pr.generated_at, status="PENDING",
+            feasibility_section_conflicts=pr.feasibility_report.get("section_conflicts"),
+            feasibility_gang_conflicts=pr.feasibility_report.get("gang_conflicts"),
+            feasibility_train_conflicts=pr.feasibility_report.get("train_conflicts"),
+            is_feasible=pr.feasibility_report.get("is_feasible"),
+            solver_status=pr.solver_stats.get("status"),
+            solve_time_ms=pr.solver_stats.get("solve_time_ms"),
+            num_variables=pr.solver_stats.get("num_variables"),
+            num_train_forced_zero=pr.solver_stats.get("num_train_forced_zero"),
+            num_section_noverlap_groups=pr.solver_stats.get("num_section_noverlap_groups"),
+            num_gang_noverlap_groups=pr.solver_stats.get("num_gang_noverlap_groups"),
         )
         db.add(plan_row)
         db.flush()  # so plan_row.id is populated before we attach items
@@ -172,17 +182,30 @@ def solve_plans(db: Session = Depends(get_db)):
     return {"run_id": plan_results[0].run_id if plan_results else None, "plan_ids": saved_plans}
 
 
+def _plan_summary_dict(r: PlanRow) -> dict:
+    return {
+        "id": r.id, "run_id": r.run_id, "rank": r.rank, "objective_value": r.objective_value,
+        "total_track_time_returned_min": r.total_track_time_returned_min,
+        "generated_at": r.generated_at.isoformat(), "status": r.status,
+        "feasibility": {
+            "section_conflicts": r.feasibility_section_conflicts,
+            "gang_conflicts": r.feasibility_gang_conflicts,
+            "train_conflicts": r.feasibility_train_conflicts,
+            "is_feasible": r.is_feasible,
+        },
+        "solver_stats": {
+            "status": r.solver_status, "solve_time_ms": r.solve_time_ms, "num_variables": r.num_variables,
+            "num_train_forced_zero": r.num_train_forced_zero,
+            "num_section_noverlap_groups": r.num_section_noverlap_groups,
+            "num_gang_noverlap_groups": r.num_gang_noverlap_groups,
+        },
+    }
+
+
 @router.get("/plans")
 def list_plans(db: Session = Depends(get_db)):
     rows = db.query(PlanRow).order_by(PlanRow.run_id.desc(), PlanRow.rank.asc()).all()
-    return [
-        {
-            "id": r.id, "run_id": r.run_id, "rank": r.rank, "objective_value": r.objective_value,
-            "total_track_time_returned_min": r.total_track_time_returned_min,
-            "generated_at": r.generated_at.isoformat(), "status": r.status,
-        }
-        for r in rows
-    ]
+    return [_plan_summary_dict(r) for r in rows]
 
 
 @router.get("/plans/{plan_id}")
@@ -211,12 +234,48 @@ def get_plan(plan_id: int, db: Session = Depends(get_db)):
         )
 
     return {
-        "id": plan.id, "run_id": plan.run_id, "rank": plan.rank, "objective_value": plan.objective_value,
-        "total_track_time_returned_min": plan.total_track_time_returned_min,
-        "generated_at": plan.generated_at.isoformat(), "status": plan.status,
+        **_plan_summary_dict(plan),
         "reviewed_by": plan.reviewed_by,
         "reviewed_at": plan.reviewed_at.isoformat() if plan.reviewed_at else None,
         "items": items,
+    }
+
+
+@router.get("/pipeline/preprocessing")
+def get_preprocessing_demo():
+    """STAGE 2 demo endpoint — regenerates the raw (pre-validation) demand
+    list, INCLUDING one deliberately invalid record, and runs it through
+    validate_demands() so the frontend can show the checks actually
+    rejecting something, not just an empty 'all good' screen. Read-only:
+    doesn't touch the database seeded at startup."""
+    from app.data_sources.synthetic_blocks import generate_demo_scenario
+    from app.preprocessing.validate import validate_demands
+
+    real_windows = load_real_train_windows()
+    raw_demands = generate_demo_scenario(real_windows)
+    # A deliberately broken record — end before start — the kind of
+    # data-entry mistake Check 1 in validate.py exists to catch.
+    raw_demands.append(
+        BlockDemand(
+            id="D_BAD", department="ENGINEERING", block_type="Engineering block", section_id="SEC-1",
+            start_min=1700, end_min=1650, work_description="Bad record: end time before start time",
+            asset_age_years=10, days_since_last_maintenance=100, defect_severity=2, safety_risk=False,
+            assigned_gang_id="G-ENG-1",
+        )
+    )
+    clean_demands, report = validate_demands(raw_demands)
+    clean_ids = {d.id for d in clean_demands}
+    return {
+        "raw_count": len(raw_demands),
+        "clean_count": len(clean_demands),
+        "checks_run": ["positive_duration", "defect_severity_range", "known_section", "known_gang", "unusually_long_block_flagged"],
+        "report": report,
+        "demands": [
+            {"id": d.id, "department": d.department, "section_id": d.section_id,
+             "start_min": d.start_min, "end_min": d.end_min, "work_description": d.work_description,
+             "passed_validation": d.id in clean_ids}
+            for d in raw_demands
+        ],
     }
 
 

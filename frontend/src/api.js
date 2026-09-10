@@ -21,6 +21,7 @@ export const api = {
   getGangs: () => request("/gangs"),
   getTrains: () => request("/trains"),
   getHistorical: () => request("/historical"),
+  getPreprocessingDemo: () => request("/pipeline/preprocessing"),
   solvePlans: () => request("/plans/solve", { method: "POST" }),
   listPlans: () => request("/plans"),
   getPlan: (id) => request(`/plans/${id}`),
