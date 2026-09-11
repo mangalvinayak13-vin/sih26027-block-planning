@@ -22,14 +22,22 @@ app.add_middleware(
 app.include_router(router)
 
 
-@app.on_event("startup")
-def on_startup():
+def init_db():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         seed_if_empty(db)
     finally:
         db.close()
+
+
+# Run this at IMPORT time, not only inside a FastAPI "startup" event.
+# WHY: on Vercel, this whole module is re-imported fresh on every cold
+# start of the serverless function — there's no long-running process for
+# an ASGI "startup" lifespan event to reliably fire the same way it does
+# under a normal uvicorn server. Import-time execution runs exactly once
+# per cold start either way, so it works correctly in both environments.
+init_db()
 
 
 @app.get("/api/health")
